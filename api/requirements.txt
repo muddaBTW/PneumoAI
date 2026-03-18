@@ -1,3 +1,4 @@
+# This file is for the Backend (Render)
 fastapi
 uvicorn
 tensorflow-cpu
@@ -7,3 +8,4 @@ requests
 pydantic
 python-multipart
 python-dotenv
+openai

@@ -5,8 +5,8 @@ import numpy as np
 import io
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import preprocess_input
-from .schemas import PredcitionResponse, ChatRequest, ChatResponse
-from .medical_chat import get_medical_chat_response
+from api.schemas import PredcitionResponse, ChatRequest, ChatResponse
+from api.medical_chat import get_medical_chat_response
 
 app = FastAPI()
 

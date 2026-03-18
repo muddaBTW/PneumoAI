@@ -1,4 +1,9 @@
 .venv/
 __pycache__/
 *.pyc
-model/*.keras
+.env
+*.log
+push_error.txt
+.gemini/
+brain/
+*keras
