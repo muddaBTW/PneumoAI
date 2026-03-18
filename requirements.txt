@@ -1,9 +1,10 @@
 fastapi
 uvicorn
 streamlit
-tensorflow
+tensorflow-cpu
 numpy
 pillow
 requests
 pydantic
 python-multipart
+python-dotenv
