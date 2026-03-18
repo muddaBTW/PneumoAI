@@ -1,15 +1,20 @@
-from fastapi import FastAPI,UploadFile,File
+from fastapi import FastAPI, UploadFile, File
 from PIL import Image
 import numpy as np
 import io
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import preprocess_input
-from schemas import PredcitionResponse
+from .schemas import PredcitionResponse, ChatRequest, ChatResponse
+from .medical_chat import get_medical_chat_response
 
 app = FastAPI()
 
-# loading out model
-model = tf.keras.models.load_model('../model/pneumonia_resnet_model.keras')
+# loading our model
+from pathlib import Path
+
+root_dir = Path(__file__).resolve().parent.parent
+model_path = root_dir / 'model' / 'pneumonia_resnet_model.keras'
+model = tf.keras.models.load_model(str(model_path))
 
 # creating our endpoint
 @app.post('/predict',response_model = PredcitionResponse)
@@ -50,3 +55,14 @@ async def predict(file:UploadFile = File(...)):
         probability=pred,
         confidence=confidence
     )
+
+@app.post('/chat', response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    response_text = get_medical_chat_response(
+        message=request.message,
+        prediction=request.prediction_context,
+        confidence=request.confidence_context,
+        image_b64=request.image_b64,
+        model_id=request.model_id
+    )
+    return ChatResponse(response=response_text)
