@@ -7,8 +7,11 @@ st.set_page_config(page_title="PneumoAI - Medical Assistant", layout="wide")
 st.title('Pneumonia Detection AI')
 
 # Configuration for Backend API URL
-# Default to localhost for local development, override with environment variable for production
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").strip("/")
+
+# Optional: Display connection info for debugging (Only if 404 occurs)
+if "connection_error_shown" not in st.session_state:
+    st.session_state.connection_error_shown = False
 
 # Initialize session state for chat and prediction persistence
 if "messages" not in st.session_state:
@@ -48,13 +51,17 @@ with col1:
             with st.spinner("Analyzing image..."):
                 try:
                     response = requests.post(f"{BACKEND_URL}/predict", files=files)
+                    if response.status_code == 220:
+                        pass # Dummy
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.prediction_data = data
                     else:
                         st.error(f'API Error: {response.status_code}')
+                        st.info(f"Targeting Backend: {BACKEND_URL}")
                 except Exception as e:
                     st.error(f"Connection Error: {str(e)}")
+                    st.info(f"Targeting Backend: {BACKEND_URL}")
 
     if st.session_state.prediction_data:
         data = st.session_state.prediction_data
