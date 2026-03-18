@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+tensorflow-cpu
+numpy
+pillow
+requests
+pydantic
+python-multipart
+python-dotenv
