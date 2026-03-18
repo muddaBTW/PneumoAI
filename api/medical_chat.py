@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# We'll expect GROQ_API_KEY in the environment or .env file
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# We'll expect GROQ_API_KEY or GROK_API_KEY in the environment or .env file
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("GROK_API_KEY")
 
 client = OpenAI(
     api_key=GROQ_API_KEY,
