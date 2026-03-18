@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import numpy as np
 import io
@@ -8,6 +9,19 @@ from .schemas import PredcitionResponse, ChatRequest, ChatResponse
 from .medical_chat import get_medical_chat_response
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+async def root():
+    return {"status": "healthy", "message": "PneumoAI API is running"}
 
 # loading our model
 from pathlib import Path
