@@ -1,9 +1,14 @@
 import streamlit as st
 import requests
+import os
 
 st.set_page_config(page_title="PneumoAI - Medical Assistant", layout="wide")
 
 st.title('Pneumonia Detection AI')
+
+# Configuration for Backend API URL
+# Default to localhost for local development, override with environment variable for production
+BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000")
 
 # Initialize session state for chat and prediction persistence
 if "messages" not in st.session_state:
@@ -42,7 +47,7 @@ with col1:
             files = {'file': st.session_state.image_bytes}
             with st.spinner("Analyzing image..."):
                 try:
-                    response = requests.post("http://127.0.0.1:8000/predict", files=files)
+                    response = requests.post(f"{BACKEND_URL}/predict", files=files)
                     if response.status_code == 200:
                         data = response.json()
                         st.session_state.prediction_data = data
@@ -104,7 +109,7 @@ with col2:
                             "model_id": selected_model_id
                         }
                         try:
-                            chat_res = requests.post("http://127.0.0.1:8000/chat", json=chat_payload)
+                            chat_res = requests.post(f"{BACKEND_URL}/chat", json=chat_payload)
                             if chat_res.status_code == 200:
                                 assistant_response = chat_res.json()["response"]
                                 st.markdown(assistant_response)
