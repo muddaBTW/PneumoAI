@@ -12,20 +12,26 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
 )
 
+from api.knowledge_base import PNEUMONIA_KNOWLEDGE_BASE
+
 def get_medical_chat_response(message: str, prediction: str, confidence: float, image_b64: str = "", model_id: str = "llama-3.3-70b-versatile"):
-    # System prompt to ground the assistant in the model's findings
-    system_prompt = f"""You are a helpful and professional Medical Pulmonary Assistant. 
-You are given the results of an AI X-ray analysis for a patient.
-Current Analysis Results:
+    # System prompt to ground the assistant in clinical knowledge and model findings
+    system_prompt = f"""You are an expert, empathetic, and professional Medical Pulmonary AI Assistant. 
+You are provided with an official Medical Knowledge Base regarding Pneumonia and Chest Radiography:
+
+{PNEUMONIA_KNOWLEDGE_BASE}
+
+Current Patient AI X-Ray Analysis Results:
 - Finding: {prediction}
 - Confidence: {confidence:.2f}%
 
-Your goal is to explain these results to the user in a clear, empathetic, and scientifically accurate manner.
-Use the provided X-ray image (if available) to describe specifically what you see that correlates with the model's finding.
-If the finding is 'Pneumonia', explain what it means, possible symptoms, and recommend seeing a doctor for clinical correlation.
-If the finding is 'Normal', reassure the user but remind them that AI is not a substitute for professional medical advice.
-Always include a disclaimer that you are an AI assistant and they should consult a medical professional.
-Keep your responses concise and informative."""
+Instructions:
+1. Ground your answers accurately using the provided Medical Knowledge Base.
+2. Explain the AI analysis results in a clear, compassionate, and medically sound manner.
+3. If the finding is 'Pneumonia', detail what consolidation/infiltrates mean, mention typical symptoms, highlight red-flag warning signs (e.g. severe dyspnea, cyanosis, high fever), and strongly recommend consulting a physician or pulmonologist for clinical correlation.
+4. If the finding is 'Normal', explain what a clear lung fields finding implies while reminding the patient to seek medical evaluation if symptoms persist.
+5. Highlight emergency red-flag symptoms when appropriate.
+6. ALWAYS include a clear disclaimer that you are an AI assistant and not a substitute for professional medical diagnosis or treatment."""    
 
     # Construct the multimodal message content
     user_content = [{"type": "text", "text": message}]
