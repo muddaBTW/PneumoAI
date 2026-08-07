@@ -7,7 +7,7 @@ st.set_page_config(page_title="PneumoAI - Medical Assistant", layout="wide")
 st.title('Pneumonia Detection AI')
 
 # Configuration for Backend API URL
-BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000").strip("/")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://your-render-backend.onrender.com").strip("/")
 
 # Optional: Display connection info for debugging (Only if 404 occurs)
 if "connection_error_shown" not in st.session_state:
@@ -46,8 +46,11 @@ with col1:
         if st.button('Analyze X-Ray', type="primary"):
             # Store image in session state
             st.session_state.image_bytes = upload_file.getvalue()
-            # send file to backend API
-            files = {'file': st.session_state.image_bytes}
+            # send file to backend API (ensure proper multipart/form-data)
+            # Use a sensible filename and content-type so the backend can parse correctly
+            files = {
+                'file': ('xray.jpg', st.session_state.image_bytes, 'image/jpeg')
+            }
             with st.spinner("Analyzing image..."):
                 try:
                     response = requests.post(f"{BACKEND_URL}/predict", files=files)
@@ -116,7 +119,7 @@ with col2:
                             "model_id": selected_model_id
                         }
                         try:
-                            chat_res = requests.post(f"{BACKEND_URL}/chat", json=chat_payload)
+                            chat_res = requests.post(f"{BACKEND_URL}/chat", json=chat_payload, timeout=60)
                             if chat_res.status_code == 200:
                                 assistant_response = chat_res.json()["response"]
                                 st.markdown(assistant_response)
