@@ -2,7 +2,7 @@
 fastapi
 uvicorn
 tflite-runtime
-numpy
+numpy<2
 pillow
 requests
 pydantic
