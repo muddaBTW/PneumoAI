@@ -7,7 +7,7 @@ st.set_page_config(page_title="PneumoAI - Medical Assistant", layout="wide")
 st.title('Pneumonia Detection AI')
 
 # Configuration for Backend API URL
-BACKEND_URL = os.getenv("BACKEND_URL", "https://your-render-backend.onrender.com").strip("/")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://pneumoai-isla.onrender.com").strip("/")
 
 # Optional: Display connection info for debugging (Only if 404 occurs)
 if "connection_error_shown" not in st.session_state:
