@@ -7,42 +7,57 @@ import numpy as np
 import io
 import os
 import asyncio
-import warnings
 from api.schemas import PredcitionResponse, ChatRequest, ChatResponse
 from api.medical_chat import get_medical_chat_response
-
-# Reduce noisy TensorFlow/absl startup logs
-os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
-# Suppress Keras optimizer mismatch warnings
-warnings.filterwarnings("ignore", message="Skipping variable loading for optimizer")
 
 # loading our model
 from pathlib import Path
 
 root_dir = Path(__file__).resolve().parent.parent
-model_path = root_dir / 'model' / 'pneumonia_resnet_model.keras'
+model_path = root_dir / 'model' / 'pneumonia_resnet_model.tflite'
 
-# Lazy-loaded model and associated preprocess function
-model = None
-_preprocess_input = None
+# Lazy-loaded TFLite interpreter
+_interpreter = None
+_input_details = None
+_output_details = None
 # Protect concurrent loads
 _model_lock = asyncio.Lock()
 
 
+def _resnet_preprocess(img_array: np.ndarray) -> np.ndarray:
+    """ResNet50 caffe-style preprocessing (replaces tf.keras preprocess_input).
+
+    Converts RGB to BGR and subtracts ImageNet channel means.
+    """
+    x = img_array.astype(np.float32)
+    # RGB -> BGR
+    x = x[..., ::-1]
+    # Subtract ImageNet mean values (BGR order)
+    x[..., 0] -= 103.939
+    x[..., 1] -= 116.779
+    x[..., 2] -= 123.68
+    return x
+
+
 async def _ensure_model_loaded():
-    global model, _preprocess_input
-    if model is not None:
+    global _interpreter, _input_details, _output_details
+    if _interpreter is not None:
         return
     async with _model_lock:
-        if model is not None:
+        if _interpreter is not None:
             return
-        # Import TensorFlow lazily to avoid heavy startup at import time
-        import tensorflow as tf
-        from tensorflow.keras.applications.resnet50 import preprocess_input as _pi
+
+        def _load():
+            from tflite_runtime.interpreter import Interpreter
+            interp = Interpreter(model_path=str(model_path))
+            interp.allocate_tensors()
+            return interp
+
         # Load model in a thread to avoid blocking the event loop
-        loaded = await asyncio.to_thread(tf.keras.models.load_model, str(model_path))
-        model = loaded
-        _preprocess_input = _pi
+        interp = await asyncio.to_thread(_load)
+        _input_details = interp.get_input_details()
+        _output_details = interp.get_output_details()
+        _interpreter = interp
 
 
 @asynccontextmanager
@@ -80,13 +95,13 @@ async def root(request: Request):
 async def warmup():
     try:
         await _ensure_model_loaded()
-        return {"status": "ok", "model_loaded": model is not None}
+        return {"status": "ok", "model_loaded": _interpreter is not None}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
 # creating our endpoint
-@app.post('/predict',response_model = PredcitionResponse)
-async def predict(file:UploadFile = File(...)):
+@app.post('/predict', response_model=PredcitionResponse)
+async def predict(file: UploadFile = File(...)):
     # read the uploaded files in bytes
     images_bytes = await file.read()
 
@@ -95,29 +110,36 @@ async def predict(file:UploadFile = File(...)):
     img = img.convert("RGB")                  # Then convert
 
     # set to input size
-    img = img.resize((224,224))
+    img = img.resize((224, 224))
 
     # convert to array
     img_array = np.array(img)
 
     # add batch dim
-    img_array = np.expand_dims(img_array,axis = 0)
+    img_array = np.expand_dims(img_array, axis=0)
 
-    # ensure model is loaded and get preprocess function
+    # ResNet50 caffe preprocessing (no TensorFlow needed)
+    img_array = _resnet_preprocess(img_array)
+
+    # ensure model is loaded
     await _ensure_model_loaded()
-    img_array = _preprocess_input(img_array)
 
-    # run prediction in threadpool to avoid blocking
-    pred_arr = await asyncio.to_thread(model.predict, img_array)
+    # run TFLite inference in threadpool to avoid blocking
+    def _run_inference(data):
+        _interpreter.set_tensor(_input_details[0]['index'], data)
+        _interpreter.invoke()
+        return _interpreter.get_tensor(_output_details[0]['index'])
+
+    pred_arr = await asyncio.to_thread(_run_inference, img_array)
     pred = float(pred_arr[0][0])
 
     # decide label and the confidence
     if pred > 0.5:
         prediction = 'Pneumonia'
-        confidence = pred*100
+        confidence = pred * 100
     else:
         prediction = 'Normal'
-        confidence = (1-pred)*100
+        confidence = (1 - pred) * 100
 
     # return structured response
     return PredcitionResponse(

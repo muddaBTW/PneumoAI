@@ -7,3 +7,4 @@ push_error.txt
 .gemini/
 brain/
 *keras
+convert_to_tflite.py
