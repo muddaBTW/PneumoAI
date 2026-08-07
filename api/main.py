@@ -54,6 +54,30 @@ async def _ensure_model_loaded():
         model = loaded
         _preprocess_input = _pi
 
+
+# Optional: preload model at application startup to avoid first-request cold start
+@app.on_event("startup")
+async def _maybe_preload_model_on_startup():
+    import os
+    preload = os.getenv("PRELOAD_MODEL", "true").lower()
+    if preload in ("1", "true", "yes"):
+        # schedule preload but don't block startup
+        try:
+            asyncio.create_task(_ensure_model_loaded())
+        except Exception:
+            # best-effort: ignore failures here, first request will load model instead
+            pass
+
+
+# Health / warm-up endpoint that forces model load when called
+@app.get("/warmup")
+async def warmup():
+    try:
+        await _ensure_model_loaded()
+        return {"status": "ok", "model_loaded": model is not None}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 # creating our endpoint
 @app.post('/predict',response_model = PredcitionResponse)
 async def predict(file:UploadFile = File(...)):
