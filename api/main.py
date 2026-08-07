@@ -3,10 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import numpy as np
 import io
-import tensorflow as tf
-from tensorflow.keras.applications.resnet50 import preprocess_input
+import os
+import asyncio
 from api.schemas import PredcitionResponse, ChatRequest, ChatResponse
 from api.medical_chat import get_medical_chat_response
+
+# Reduce noisy TensorFlow/absl startup logs until the model is actually loaded
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
 
 app = FastAPI()
 
@@ -28,7 +31,28 @@ from pathlib import Path
 
 root_dir = Path(__file__).resolve().parent.parent
 model_path = root_dir / 'model' / 'pneumonia_resnet_model.keras'
-model = tf.keras.models.load_model(str(model_path))
+
+# Lazy-loaded model and associated preprocess function
+model = None
+_preprocess_input = None
+# Protect concurrent loads
+_model_lock = asyncio.Lock()
+
+
+async def _ensure_model_loaded():
+    global model, _preprocess_input
+    if model is not None:
+        return
+    async with _model_lock:
+        if model is not None:
+            return
+        # Import TensorFlow lazily to avoid heavy startup at import time
+        import tensorflow as tf
+        from tensorflow.keras.applications.resnet50 import preprocess_input as _pi
+        # Load model in a thread to avoid blocking the event loop
+        loaded = await asyncio.to_thread(tf.keras.models.load_model, str(model_path))
+        model = loaded
+        _preprocess_input = _pi
 
 # creating our endpoint
 @app.post('/predict',response_model = PredcitionResponse)
@@ -49,11 +73,13 @@ async def predict(file:UploadFile = File(...)):
     # add batch dim
     img_array = np.expand_dims(img_array,axis = 0)
 
-    # apply resnet preprocessing
-    img_array = preprocess_input(img_array)
+    # ensure model is loaded and get preprocess function
+    await _ensure_model_loaded()
+    img_array = _preprocess_input(img_array)
 
-    # predictions
-    pred = float(model.predict(img_array)[0][0])
+    # run prediction in threadpool to avoid blocking
+    pred_arr = await asyncio.to_thread(model.predict, img_array)
+    pred = float(pred_arr[0][0])
 
     # decide label and the confidence
     if pred > 0.5:
