@@ -1,30 +1,20 @@
-from fastapi import FastAPI, UploadFile, File
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from PIL import Image
 import numpy as np
 import io
 import os
 import asyncio
+import warnings
 from api.schemas import PredcitionResponse, ChatRequest, ChatResponse
 from api.medical_chat import get_medical_chat_response
 
-# Reduce noisy TensorFlow/absl startup logs until the model is actually loaded
+# Reduce noisy TensorFlow/absl startup logs
 os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
-
-app = FastAPI()
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/")
-async def root():
-    return {"status": "healthy", "message": "PneumoAI API is running"}
+# Suppress Keras optimizer mismatch warnings
+warnings.filterwarnings("ignore", message="Skipping variable loading for optimizer")
 
 # loading our model
 from pathlib import Path
@@ -55,18 +45,34 @@ async def _ensure_model_loaded():
         _preprocess_input = _pi
 
 
-# Optional: preload model at application startup to avoid first-request cold start
-@app.on_event("startup")
-async def _maybe_preload_model_on_startup():
-    import os
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifespan handler: preload model in background after server starts."""
     preload = os.getenv("PRELOAD_MODEL", "true").lower()
     if preload in ("1", "true", "yes"):
-        # schedule preload but don't block startup
-        try:
-            asyncio.create_task(_ensure_model_loaded())
-        except Exception:
-            # best-effort: ignore failures here, first request will load model instead
-            pass
+        # Schedule model preload as a background task so port binds immediately
+        asyncio.create_task(_ensure_model_loaded())
+    yield
+    # Shutdown: nothing to clean up
+
+
+app = FastAPI(lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.api_route("/", methods=["GET", "HEAD"])
+async def root(request: Request):
+    """Health check endpoint — supports both GET and HEAD for Render."""
+    body = {"status": "healthy", "message": "PneumoAI API is running"}
+    return JSONResponse(content=body)
 
 
 # Health / warm-up endpoint that forces model load when called
